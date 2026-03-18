@@ -51,7 +51,11 @@ async function postJson(url, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  return response.json();
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || "request failed");
+  }
+  return data;
 }
 
 async function loadArtifacts() {
@@ -61,36 +65,52 @@ async function loadArtifacts() {
 }
 
 document.getElementById("extract_btn").addEventListener("click", async () => {
-  const currentSpec = getFormSpec();
-  const chat = document.getElementById("chat_input").value.trim();
-  const messages = chat ? chat.split("\n").filter(Boolean) : [];
+  try {
+    const currentSpec = getFormSpec();
+    const chat = document.getElementById("chat_input").value.trim();
+    const messages = chat ? chat.split("\n").filter(Boolean) : [];
 
-  const data = await postJson("/spec/extract", {
-    chat_messages: messages,
-    current_spec: currentSpec,
-  });
-  extractedSpec = data.data.spec;
-  fillForm(extractedSpec);
-  showJson(diffView, { from: currentSpec, to: extractedSpec });
+    const data = await postJson("/spec/extract", {
+      chat_messages: messages,
+      current_spec: currentSpec,
+    });
+    extractedSpec = data.data.spec;
+    fillForm(extractedSpec);
+    showJson(diffView, { from: currentSpec, to: extractedSpec });
+  } catch (error) {
+    showJson(resultView, { ok: false, message: String(error) });
+  }
 });
 
 document.getElementById("validate_btn").addEventListener("click", async () => {
-  const spec = extractedSpec || getFormSpec();
-  const data = await postJson("/spec/validate", { spec });
-  showJson(resultView, data);
+  try {
+    const spec = extractedSpec || getFormSpec();
+    const data = await postJson("/spec/validate", { spec });
+    showJson(resultView, data);
+  } catch (error) {
+    showJson(resultView, { ok: false, message: String(error) });
+  }
 });
 
 document.getElementById("freeze_btn").addEventListener("click", async () => {
-  const spec = extractedSpec || getFormSpec();
-  const data = await postJson("/spec/freeze", { spec });
-  frozenSpec = { ...spec, version: data.data.version };
-  showJson(resultView, { freeze: data, frozen_spec_preview: frozenSpec });
+  try {
+    const spec = extractedSpec || getFormSpec();
+    const data = await postJson("/spec/freeze", { spec });
+    frozenSpec = { ...spec, version: data.data.version };
+    showJson(resultView, { freeze: data, frozen_spec_preview: frozenSpec });
+  } catch (error) {
+    showJson(resultView, { ok: false, message: String(error) });
+  }
 });
 
 document.getElementById("run_btn").addEventListener("click", async () => {
-  const spec = frozenSpec || extractedSpec || getFormSpec();
-  const data = await postJson("/workflow/run", { spec });
-  showJson(resultView, data);
+  try {
+    const spec = frozenSpec || extractedSpec || getFormSpec();
+    const data = await postJson("/workflow/run", { spec });
+    showJson(resultView, data);
+  } catch (error) {
+    showJson(resultView, { ok: false, message: String(error) });
+  }
 });
 
 document.getElementById("reload_artifacts_btn").addEventListener("click", loadArtifacts);

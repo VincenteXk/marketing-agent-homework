@@ -1,64 +1,39 @@
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from copy import deepcopy
 
 from apps.api.models import ProjectSpec
+from apps.api.services.llm_service import deepseek_chat_json
 
 
 def _normalize_text(messages: Iterable[str]) -> str:
     return "\n".join([m.strip() for m in messages if m and m.strip()])
 
 
-def _extract_sample_size(text: str) -> int | None:
-    patterns = [
-        r"样本(?:量|数)?\s*[：: ]\s*(\d+)",
-        r"sample(?:\s*size)?\s*[：: ]\s*(\d+)",
-        r"(\d+)\s*份(?:问卷|样本)",
+def _llm_extract_patch(text: str) -> ProjectSpec:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是项目规格抽取器。"
+                "请根据用户对话提取 project spec patch，且只输出 JSON。"
+                "JSON 结构必须是："
+                "{"
+                "\"domain\": string,"
+                "\"goal\": string,"
+                "\"target_users\": string[],"
+                "\"constraints\": {\"timeline\": string, \"budget\": string, \"sample_size\": number, \"must_use_credamo\": boolean},"
+                "\"deliverables\": {\"deadline\": string},"
+                "\"notes\": string"
+                "}"
+                "若无法确定某字段，返回空字符串或空数组；不要输出解释文本。"
+            ),
+        },
+        {"role": "user", "content": text},
     ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            return int(match.group(1))
-    return None
-
-
-def _extract_deadline(text: str) -> str:
-    match = re.search(r"(\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?)", text)
-    return match.group(1) if match else ""
-
-
-def _extract_target_users(text: str) -> list[str]:
-    candidates = []
-    keyword_groups = [
-        ("大学生", ["大学生"]),
-        ("职场年轻人", ["职场", "白领", "上班族", "年轻人"]),
-        ("银发人群", ["银发", "中老年", "老人"]),
-        ("青少年", ["青少年", "中学生", "高中生"]),
-    ]
-    for label, words in keyword_groups:
-        if any(word in text for word in words):
-            candidates.append(label)
-    return list(dict.fromkeys(candidates))
-
-
-def _extract_domain(text: str) -> str:
-    if "AI陪伴" in text or "陪伴APP" in text or "陪伴app" in text.lower():
-        return "AI陪伴APP"
-    return ""
-
-
-def _extract_goal(text: str) -> str:
-    if "情绪" in text and "成长" in text:
-        return "为目标用户提供情绪支持与日常成长支持"
-    if "情绪" in text:
-        return "为目标用户提供情绪支持"
-    if "成长" in text:
-        return "为目标用户提供日常成长支持"
-    if "AI陪伴" in text or "陪伴APP" in text or "陪伴app" in text.lower():
-        return "围绕AI陪伴场景完成市场验证与产品策略设计"
-    return ""
+    patch_json = deepseek_chat_json(messages=messages, max_tokens=1200)
+    return ProjectSpec(**patch_json)
 
 
 def merge_specs(base: ProjectSpec, patch: ProjectSpec) -> ProjectSpec:
@@ -75,22 +50,9 @@ def merge_specs(base: ProjectSpec, patch: ProjectSpec) -> ProjectSpec:
 
 def extract_spec_from_chat(chat_messages: list[str], current_spec: ProjectSpec | None = None) -> ProjectSpec:
     text = _normalize_text(chat_messages)
-    patch = ProjectSpec()
-
-    patch.domain = _extract_domain(text)
-    patch.goal = _extract_goal(text)
-    patch.target_users = _extract_target_users(text)
-
-    sample_size = _extract_sample_size(text)
-    if sample_size is not None:
-        patch.constraints.sample_size = sample_size
-
-    deadline = _extract_deadline(text)
-    if deadline:
-        patch.deliverables.deadline = deadline
-
-    if "credamo" in text.lower():
-        patch.constraints.must_use_credamo = True
+    if not text:
+        raise ValueError("chat_messages 不能为空")
+    patch = _llm_extract_patch(text)
 
     if current_spec is None:
         return patch

@@ -39,6 +39,7 @@
 
 ## 说明
 
-当前 `extract` 是可替换的抽取器（规则版），后续可直接接入 LLM（OpenAI / DeepSeek 等）作为真正的对话抽取 Agent。
+当前 `extract` 与 `workflow` 已采用 DeepSeek 严格执行模式，不做规则降级或兜底。
+任一步骤失败会直接报错并中止流程。
 
 可使用 `GET /llm/ping` 快速验证 DeepSeek 连通性。

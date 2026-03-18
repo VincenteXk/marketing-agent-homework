@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -45,13 +45,19 @@ def health() -> ApiResponse:
 
 @app.get("/llm/ping", response_model=ApiResponse)
 def llm_ping(prompt: str = "请回复pong") -> ApiResponse:
-    result = deepseek_ping(prompt=prompt)
+    try:
+        result = deepseek_ping(prompt=prompt)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ApiResponse(message="llm ping finished", data=result)
 
 
 @app.post("/spec/extract", response_model=ApiResponse)
 def spec_extract(payload: ExtractRequest) -> ApiResponse:
-    spec = extract_spec_from_chat(payload.chat_messages, payload.current_spec)
+    try:
+        spec = extract_spec_from_chat(payload.chat_messages, payload.current_spec)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ApiResponse(message="spec extracted", data={"spec": spec.model_dump()})
 
 
@@ -69,7 +75,10 @@ def spec_freeze(payload: FreezeRequest) -> ApiResponse:
 
 @app.post("/workflow/run", response_model=ApiResponse)
 def workflow_run(payload: WorkflowRunRequest) -> ApiResponse:
-    result = run_workflow(payload.spec)
+    try:
+        result = run_workflow(payload.spec)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     return ApiResponse(message="workflow submitted", data=result)
 
 
