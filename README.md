@@ -1,45 +1,86 @@
-# AI Marketing Lab (Proj Framework)
+# AI Marketing Lab
 
-一个可复用到 `Proj1 / Proj2 / Proj3` 的本地项目骨架，支持通过前端表单与对话生成 `project spec`，并驱动后续 Agent 工作流。
+一个可落地使用的营销分析工具。系统通过“赛道调研 -> 概念设计 -> 模拟画像 -> 汇总”流程，帮助从机会洞察快速推进到可执行的分析结论。
 
-## 当前实现（MVP）
+## 项目能力
 
-- 前端单页：`apps/web`
-  - 业务对话输入
-  - 分析进度时间线
-  - 结果卡片与原始结果查看
+- 前端单页应用：`apps/web`
+  - 赛道初步调研（基于秘塔搜索）
+  - 产品概念多轮对话
+  - 一键生成模拟消费者画像
+  - 汇总页查看结构化结果
 - 后端 API：`apps/api`
-  - `POST /session/message`
-  - `POST /session/run`
-  - `GET /session/status`
-  - `GET /session/result`
-  - `GET /session/export`
-  - 保留底层 `spec/workflow` API 作为内部能力
+  - 提供调研/概念/画像/会话工作流接口
+  - 提供静态资源托管（`/` 直接访问前端）
 
-## 启动
+## 快速启动
 
 1. 安装依赖
    - `pip install -r requirements.txt`
-2. 配置密钥（项目根目录 `.env`）
-   - `DEEPSEEK_API_KEY=...`
-   - `DEEPSEEK_BASE_URL=https://api.deepseek.com`
-   - `DEEPSEEK_MODEL=deepseek-chat`
+2. 在项目根目录创建 `.env`（或 `.env.local`）
 3. 启动服务
    - `uvicorn apps.api.main:app --reload --port 8000`
-4. 访问页面
+4. 打开页面
    - `http://127.0.0.1:8000`
 
-## 目录
+## 环境变量
 
-- `apps/api`：API 与工作流入口
-- `apps/web`：前端静态页面
-- `projects`：冻结后的 Spec 版本
-- `artifacts`：运行结果导出
-- `runs`：运行日志
+最少需要配置如下变量（按你实际账号填写）：
 
-## 说明
+```env
+DEEPSEEK_API_KEY=your_deepseek_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
 
-当前产品默认通过“会话接口”执行，`spec` 由后端内部维护，前端不暴露配置细节。
-`extract` 与 `workflow` 采用 DeepSeek 严格执行模式，不做规则降级或兜底，任一步骤失败会直接中止。
+METASO_API_KEY=your_metaso_key
+METASO_BASE_URL=https://metaso.cn/api
+METASO_MODEL=ds-r1
+```
 
-可使用 `GET /llm/ping` 快速验证 DeepSeek 连通性。
+说明：
+- 系统会自动读取根目录下的 `.env` 和 `.env.local`
+- 如果同名变量已在系统环境中存在，则优先使用系统环境值
+
+## API 概览
+
+### 基础接口
+
+- `GET /health`：服务健康检查
+- `GET /llm/ping`：测试 DeepSeek 连通性
+
+### 调研与概念
+
+- `POST /research/stream`：赛道调研流式输出（SSE）
+- `POST /concept/chat`：概念对话（非流式）
+- `POST /concept/stream`：概念对话流式输出（SSE）
+- `POST /persona/generate`：根据概念生成模拟画像
+
+### Spec / Workflow（底层能力）
+
+- `POST /spec/extract`
+- `POST /spec/validate`
+- `POST /spec/freeze`
+- `POST /workflow/run`
+- `GET /artifacts`
+
+### Session 会话工作流
+
+- `POST /session/message`
+- `POST /session/run`
+- `GET /session/status`
+- `GET /session/result`
+- `GET /session/export`
+
+## 目录结构
+
+- `apps/api`：FastAPI 服务与业务流程
+- `apps/web`：前端静态页面（`index.html` / `script.js` / `styles.css`）
+- `projects`：冻结后的 spec 快照
+- `artifacts`：流程运行产物
+- `runs`：运行日志与过程数据
+
+## 产品说明
+
+- 当前前端主流程覆盖“调研、概念、画像、汇总”四个核心分析阶段
+- `conjoint / simulation / real-data` 分区为预留区，目前仅展示占位内容
+- 依赖外部模型与搜索服务，不做本地兜底；调用失败会在接口层直接返回错误
