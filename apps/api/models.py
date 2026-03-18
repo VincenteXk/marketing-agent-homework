@@ -55,6 +55,32 @@ class SessionRunRequest(BaseModel):
     session_id: str
 
 
+class MarketResearchRequest(BaseModel):
+    domain: str
+
+
+class ConceptMessage(BaseModel):
+    role: str
+    text: str
+
+
+class ConceptChatRequest(BaseModel):
+    lane: str = ""
+    research_context: str = ""
+    opening_message: str = ""
+    current_concept: str = ""
+    messages: list[ConceptMessage] = Field(default_factory=list)
+
+
+class PersonaGenerateRequest(BaseModel):
+    lane: str = ""
+    research_context: str = ""
+    research_structured: dict[str, Any] = Field(default_factory=dict)
+    confirmed_concept: str = ""
+    target_users: list[str] = Field(default_factory=list)
+    sample_size: int = 120
+
+
 class ApiResponse(BaseModel):
     ok: bool = True
     message: str = ""

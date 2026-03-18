@@ -81,6 +81,69 @@ def deepseek_chat_json(messages: list[dict[str, str]], max_tokens: int = 1024) -
         raise RuntimeError(f"llm returned non-json content: {raw[:300]}") from exc
 
 
+def deepseek_chat_json_stream(messages: list[dict[str, str]], max_tokens: int = 1024):
+    if not settings.deepseek_api_key:
+        raise RuntimeError("missing DEEPSEEK_API_KEY")
+
+    url = f"{settings.deepseek_base_url.rstrip('/')}/v1/chat/completions"
+    payload = {
+        "model": settings.deepseek_model,
+        "messages": messages,
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+        "stream": True,
+        "response_format": {"type": "json_object"},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = request.Request(
+        url=url,
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {settings.deepseek_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        },
+    )
+    try:
+        with request.urlopen(req, timeout=90) as resp:
+            raw_parts: list[str] = []
+            for raw in resp:
+                line = raw.decode("utf-8", errors="ignore").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                data_part = line[5:].strip()
+                if not data_part:
+                    continue
+                if data_part == "[DONE]":
+                    break
+                try:
+                    payload_obj = json.loads(data_part)
+                except json.JSONDecodeError:
+                    continue
+                choices = payload_obj.get("choices", [])
+                if not choices:
+                    continue
+                delta = choices[0].get("delta", {})
+                piece = str(delta.get("content") or "")
+                if piece:
+                    raw_parts.append(piece)
+                    yield {"type": "delta", "content": piece}
+            full_raw = "".join(raw_parts).strip()
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"http {exc.code}: {detail[:500]}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"request failed: {exc}") from exc
+
+    try:
+        parsed = json.loads(full_raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"llm returned non-json content: {full_raw[:300]}") from exc
+
+    yield {"type": "done", "raw": full_raw, "parsed": parsed}
+
+
 def deepseek_ping(prompt: str = "ping") -> dict[str, str]:
     content = deepseek_chat_text(
         messages=[{"role": "user", "content": prompt}],

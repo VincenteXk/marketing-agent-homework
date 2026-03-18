@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from apps.api.models import ProjectSpec
+from apps.api.services.llm_service import deepseek_chat_json
 from apps.api.services.spec_service import extract_spec_from_chat, validate_spec
 from apps.api.services.workflow_service import run_workflow
 
@@ -22,6 +23,24 @@ STEP_ORDER = [
     "simulation_analysis",
     "reflection",
 ]
+
+ERROR_TO_FIELD = {
+    "domain 不能为空": "domain",
+    "goal 不能为空": "goal",
+    "target_users 至少需要 1 个用户群体": "target_users",
+    "constraints.sample_size 必须大于 0": "sample_size",
+}
+
+FIELD_QUESTION = {
+    "domain": "你想分析的行业或赛道是什么？比如：AI 陪伴、茶饮、在线教育。",
+    "goal": "这次最核心的业务目标是什么？比如：验证付费模式、提高留存、优化定价。",
+    "target_users": "目标用户是谁？请至少说 1-2 类人群。",
+    "sample_size": "计划样本量是多少？建议至少 50。",
+}
+
+OPTIONAL_GUIDE = {
+    "deliverables.deadline 为空，建议补充": "你希望什么时候前交付结果（可选）？",
+}
 
 
 @dataclass
@@ -53,19 +72,129 @@ def _require_session(session_id: str) -> SessionState:
     return _STORE[session_id]
 
 
-def _business_ack(spec: ProjectSpec, errors: list[str], warnings: list[str]) -> str:
-    if errors:
-        return (
-            "已记录你的业务需求，但还不能启动完整分析。"
-            "请继续补充：赛道、目标用户、核心目标、样本量或截止时间。"
-        )
-    message = (
-        f"已收到需求：{spec.domain or '未指定赛道'} / {spec.goal or '未指定目标'}。"
-        "你可以直接点击“开始分析”，我会自动完成市场探索、画像、联合分析与策略建议。"
+def _first_missing_field(errors: list[str]) -> str | None:
+    for err in errors:
+        field = ERROR_TO_FIELD.get(err)
+        if field:
+            return field
+    return None
+
+
+def _spec_snapshot(spec: ProjectSpec) -> str:
+    users = "、".join(spec.target_users[:2]) if spec.target_users else "未填写"
+    return (
+        f"当前已知：赛道={spec.domain or '未填写'}；"
+        f"目标={spec.goal or '未填写'}；"
+        f"用户={users}；"
+        f"样本量={spec.constraints.sample_size if spec.constraints.sample_size > 0 else '未填写'}。"
     )
+
+
+def _known_info(spec: ProjectSpec) -> dict[str, Any]:
+    return {
+        "domain": spec.domain or "",
+        "goal": spec.goal or "",
+        "target_users": spec.target_users,
+        "sample_size": spec.constraints.sample_size if spec.constraints.sample_size > 0 else None,
+        "deadline": spec.deliverables.deadline or "",
+    }
+
+
+def _fallback_guesses(field: str, spec: ProjectSpec) -> list[str]:
+    if field == "domain":
+        return [
+            "AI 应用（如 AI 陪伴 / 学习 / 生产力）",
+            "快消零售（如饮品 / 零食 / 美妆）",
+            "互联网服务（如内容社区 / 工具订阅）",
+        ]
+    if field == "goal":
+        return [
+            "验证目标用户是否愿意付费",
+            "提升留存与复购，找到关键杠杆",
+            "优化定价与套餐组合，提高转化率",
+        ]
+    if field == "target_users":
+        domain_hint = spec.domain or "该赛道"
+        return [
+            f"{domain_hint} 的大学生用户",
+            f"{domain_hint} 的 22-30 岁职场新人",
+            f"{domain_hint} 的重度兴趣用户",
+        ]
+    if field == "sample_size":
+        return ["100", "200", "300"]
+    return []
+
+
+def _guess_question_with_llm(spec: ProjectSpec, field: str, chat_history: list[str]) -> tuple[str, list[str]]:
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是营销研究顾问。"
+                "请基于当前已知项目信息，针对一个缺失字段提出下一问，并给出 2-3 个高质量猜测答案，"
+                "帮助用户快速确认。"
+                "输出必须是 JSON："
+                "{"
+                "\"question\": string,"
+                "\"guesses\": string[]"
+                "}"
+                "要求：问题简洁、业务化；猜测要具体可执行，不能空泛。"
+                "不要输出任何非 JSON 文本。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "missing_field": field,
+                    "spec_snapshot": spec.model_dump(),
+                    "latest_messages": chat_history[-4:],
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    try:
+        data = deepseek_chat_json(messages=messages, max_tokens=420)
+        question = str(data.get("question", "")).strip() or FIELD_QUESTION[field]
+        guesses_raw = data.get("guesses", [])
+        guesses = [str(item).strip() for item in guesses_raw if str(item).strip()][:3]
+        if not guesses:
+            guesses = _fallback_guesses(field, spec)
+        return question, guesses
+    except Exception:  # noqa: BLE001
+        return FIELD_QUESTION[field], _fallback_guesses(field, spec)
+
+
+def _business_ack(
+    spec: ProjectSpec,
+    errors: list[str],
+    warnings: list[str],
+    chat_history: list[str],
+) -> tuple[str, str, bool, list[str], list[str]]:
+    missing_fields = [ERROR_TO_FIELD[e] for e in errors if e in ERROR_TO_FIELD]
+    next_field = _first_missing_field(errors)
+    if next_field:
+        question, guesses = _guess_question_with_llm(spec, next_field, chat_history)
+        guesses_text = f" 可参考：{'; '.join(guesses)}。" if guesses else ""
+        message = (
+            "收到，我来一步步带你补全需求。"
+            f"{_spec_snapshot(spec)}"
+            f"下一步请直接回答：{question}{guesses_text}"
+        )
+        return message, question, False, missing_fields, guesses
+
+    optional_question = ""
     if warnings:
-        message += " 另外建议补充截止时间等细节，结果会更稳。"
-    return message
+        optional_question = OPTIONAL_GUIDE.get(warnings[0], "如果方便，可补充截止时间和预算。")
+    message = (
+        "信息已足够启动分析。"
+        f"{_spec_snapshot(spec)}"
+        "你现在可以直接点击“开始一键分析”。"
+    )
+    if optional_question:
+        message += f" 若想让结果更贴合业务，还可补充：{optional_question}"
+    return message, optional_question, True, [], []
 
 
 def add_user_message(session_id: str | None, message: str) -> dict[str, Any]:
@@ -81,6 +210,12 @@ def add_user_message(session_id: str | None, message: str) -> dict[str, Any]:
 
     updated_spec = extract_spec_from_chat(chat_messages=[text], current_spec=state.spec)
     readiness = validate_spec(updated_spec)
+    assistant_message, next_question, ready_to_run, missing_fields, answer_guesses = _business_ack(
+        updated_spec,
+        readiness["errors"],
+        readiness["warnings"],
+        state.chat_history + [text],
+    )
 
     with _LOCK:
         state.spec = updated_spec
@@ -91,7 +226,12 @@ def add_user_message(session_id: str | None, message: str) -> dict[str, Any]:
 
     return {
         "session_id": sid,
-        "assistant_message": _business_ack(updated_spec, readiness["errors"], readiness["warnings"]),
+        "assistant_message": assistant_message,
+        "next_question": next_question,
+        "ready_to_run": ready_to_run,
+        "missing_fields": missing_fields,
+        "answer_guesses": answer_guesses,
+        "known_info": _known_info(updated_spec),
         "readiness": readiness,
         "status": state.status,
     }

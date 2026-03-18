@@ -8,37 +8,125 @@
   </head>
   <body>
     <main class="container">
-      <h1>Marketing Agent Copilot</h1>
-      <p class="muted">直接用业务语言描述你的需求，我会自动完成市场探索、画像、联合分析与策略建议。</p>
+      <section class="hero-intro">
+        <h1>Marketing Agent</h1>
+        <p class="muted">从探索赛道到验证需求，系统会全程助你完成营销分析。</p>
+      </section>
 
-      <section class="card">
-        <h2>业务对话</h2>
-        <div id="chat_log" class="chat-log"></div>
-        <textarea
-          id="chat_input"
-          rows="3"
-          placeholder="例如：我们想做AI陪伴APP，面向大学生和职场年轻人，希望验证产品策略和付费模式，样本量100"
-        ></textarea>
-        <div class="actions">
-          <button id="send_btn">发送需求</button>
-          <button id="run_btn" class="primary">开始分析</button>
-          <button id="status_btn">刷新状态</button>
-          <button id="result_btn">查看结果</button>
+      <nav class="tab-nav" aria-label="功能分区">
+        <button type="button" class="tab-btn active" data-tab="research">赛道初步调研</button>
+        <button type="button" class="tab-btn" data-tab="concept">产品概念设计</button>
+        <button type="button" class="tab-btn" data-tab="persona">模拟画像设计</button>
+        <button type="button" class="tab-btn" data-tab="conjoint">联合分析设计</button>
+        <button type="button" class="tab-btn" data-tab="simulation">消费者模拟</button>
+        <button type="button" class="tab-btn" data-tab="real-data">真实数据获取</button>
+        <button type="button" class="tab-btn" data-tab="summary">汇总</button>
+      </nav>
+
+      <div id="tab-research" class="tab-content active" data-tab-content="research">
+        <section class="card">
+          <h2>基于Agent的赛道初步调研</h2>
+          <p class="muted small">
+            输入你想调研的赛道名称，系统会调用秘塔的API进行网页搜索和初步研究。<br>
+            依课程建议，默认关注：1.该行业的主要消费者痛点； 2.现有产品的主要不足； 3.可能的创新方向或机会点
+          </p>
+          <label>
+            赛道名称：
+            <input id="lane_input" placeholder="例如：AI助手" />
+          </label>
+          <div class="actions">
+            <button id="research_btn" class="primary">启动Agent调研</button>
+          </div>
+          <div id="query_preview" class="query-preview small"></div>
+          <div id="research_stream" class="output research-stream markdown-content"></div>
+          <div id="research_structured" class="known-grid"></div>
+          <div id="citation_list" class="citation-list"></div>
+        </section>
+      </div>
+
+      <div id="tab-concept" class="tab-content" data-tab-content="concept">
+        <section class="card">
+          <h2>产品概念设计</h2>
+          <p class="muted small">通过和 Agent 的对话，逐步完善目标产品概念。</p>
+          <div class="concept-chat-shell">
+            <div id="concept_chat_log" class="concept-chat-log"></div>
+            <div class="concept-chat-composer">
+              <input id="concept_chat_input" type="text" placeholder="请输入你的想法，例如：我们主打通勤场景下的轻量化方案" />
+              <button id="concept_send_btn" type="button">发送</button>
+            </div>
+          </div>
+          <div id="concept_confirmed_box" class="concept-confirmed-box hidden"></div>
+        </section>
+      </div>
+
+      <div id="tab-persona" class="tab-content" data-tab-content="persona">
+        <section class="card">
+          <h2>模拟画像设计</h2>
+          <p class="muted small">基于已确认的产品概念，点击生成模拟画像（至少三类消费者）。</p>
+          <div class="actions">
+            <button id="persona_generate_btn" class="primary">生成模拟消费者画像</button>
+          </div>
+          <div id="persona_progress_text" class="small muted">当前进度：待开始</div>
+          <div id="persona_status_hint" class="small muted hidden"></div>
+          <div id="persona_stats" class="known-grid"></div>
+          <div id="persona_chart" class="persona-chart"></div>
+          <div id="persona_cards" class="result-cards persona-cards-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-conjoint" class="tab-content" data-tab-content="conjoint">
+        <section class="card">
+          <h2>联合分析设计</h2>
+          <p class="muted small">此分区预留给属性与水平设计流程，当前请在“汇总”分区继续分析。</p>
+        </section>
+      </div>
+
+      <div id="tab-simulation" class="tab-content" data-tab-content="simulation">
+        <section class="card">
+          <h2>消费者数据模拟</h2>
+          <p class="muted small">此分区预留给样本与模拟数据流程，当前请在“汇总”分区继续分析。</p>
+        </section>
+      </div>
+
+      <div id="tab-real-data" class="tab-content" data-tab-content="real-data">
+        <section class="card">
+          <h2>获取真实数据</h2>
+          <p class="muted small">此分区预留给真实问卷/访谈数据接入流程。</p>
+        </section>
+      </div>
+
+      <div id="tab-summary" class="tab-content" data-tab-content="summary">
+        <section class="card">
+          <h2 id="summary_lane_title">汇总</h2>
+          <div id="summary_confirmed_box" class="concept-confirmed-box hidden"></div>
+          <div id="summary_persona_names" class="summary-persona-box hidden"></div>
+          <div id="summary_structured" class="known-grid"></div>
+        </section>
+
+        <div class="hidden">
+          <div id="chat_log" class="chat-log"></div>
+          <textarea id="chat_input" rows="3"></textarea>
+          <button id="send_btn" class="primary" type="button">发送回答</button>
+          <button id="run_btn" type="button">开始一键分析</button>
+          <button id="result_btn" type="button">查看分析结论</button>
+          <div id="known_info" class="known-grid"></div>
+          <div id="next_question_box" class="small checklist checklist-warning">
+            <strong>下一问：</strong><span id="next_question_text">请先说说你想分析的业务场景。</span>
+          </div>
+          <div id="guess_suggestions" class="suggestions"></div>
+          <p id="session_hint" class="muted small">会话：未创建</p>
+          <p id="status_human" class="small">还没开始分析。先点击“保存需求”。</p>
+          <div id="timeline" class="timeline"></div>
+          <pre id="status_view" class="output"></pre>
+          <p id="result_tip" class="small">分析完成后会自动展示结论卡片。</p>
+          <div id="result_cards" class="result-cards"></div>
+          <pre id="result_view" class="output"></pre>
+          <button id="export_md_btn" type="button" class="secondary-btn">导出MD</button>
         </div>
-        <p id="session_hint" class="muted small">会话：未创建</p>
-      </section>
-
-      <section class="card">
-        <h2>执行进度</h2>
-        <div id="timeline" class="timeline"></div>
-        <pre id="status_view" class="output"></pre>
-      </section>
-
-      <section class="card">
-        <h2>结果中心</h2>
-        <div id="result_cards" class="result-cards"></div>
-        <pre id="result_view" class="output"></pre>
-      </section>
+        <section class="summary-reset-section">
+          <button id="restart_btn" type="button" class="danger-btn">重新开始</button>
+        </section>
+      </div>
     </main>
 
     <script src="/static/script.js"></script>
