@@ -46,6 +46,15 @@ class WorkflowRunRequest(BaseModel):
     spec: ProjectSpec
 
 
+class SessionMessageRequest(BaseModel):
+    session_id: str | None = None
+    message: str
+
+
+class SessionRunRequest(BaseModel):
+    session_id: str
+
+
 class ApiResponse(BaseModel):
     ok: bool = True
     message: str = ""

@@ -1,45 +1,28 @@
-const diffView = document.getElementById("diff_view");
+const chatLog = document.getElementById("chat_log");
+const sessionHint = document.getElementById("session_hint");
+const timeline = document.getElementById("timeline");
+const statusView = document.getElementById("status_view");
 const resultView = document.getElementById("result_view");
+const resultCards = document.getElementById("result_cards");
 
-let extractedSpec = null;
-let frozenSpec = null;
+const STEP_ORDER = [
+  "market_exploration",
+  "persona_generation",
+  "conjoint_design",
+  "simulation_analysis",
+  "reflection",
+];
 
-function getFormSpec() {
-  const targetUsers = document
-    .getElementById("target_users")
-    .value.split(",")
-    .map((x) => x.trim())
-    .filter(Boolean);
+const STEP_LABEL = {
+  market_exploration: "市场探索",
+  persona_generation: "消费者画像",
+  conjoint_design: "联合分析设计",
+  simulation_analysis: "模拟与策略分析",
+  reflection: "反思与建议",
+};
 
-  return {
-    project_id: document.getElementById("project_id").value || "proj1",
-    version: "draft",
-    domain: document.getElementById("domain").value.trim(),
-    goal: document.getElementById("goal").value.trim(),
-    target_users: targetUsers,
-    constraints: {
-      timeline: "",
-      budget: "",
-      sample_size: Number(document.getElementById("sample_size").value || 100),
-      must_use_credamo: true,
-    },
-    deliverables: {
-      format: ["ppt", "pdf", "excel", "chat_logs"],
-      deadline: document.getElementById("deadline").value.trim(),
-    },
-    notes: document.getElementById("notes").value.trim(),
-  };
-}
-
-function fillForm(spec) {
-  document.getElementById("project_id").value = spec.project_id || "";
-  document.getElementById("domain").value = spec.domain || "";
-  document.getElementById("goal").value = spec.goal || "";
-  document.getElementById("target_users").value = (spec.target_users || []).join(",");
-  document.getElementById("sample_size").value = spec.constraints?.sample_size || 100;
-  document.getElementById("deadline").value = spec.deliverables?.deadline || "";
-  document.getElementById("notes").value = spec.notes || "";
-}
+let sessionId = null;
+let pollTimer = null;
 
 function showJson(target, obj) {
   target.textContent = JSON.stringify(obj, null, 2);
@@ -58,61 +41,143 @@ async function postJson(url, payload) {
   return data;
 }
 
-async function loadArtifacts() {
-  const response = await fetch("/artifacts");
-  const data = await response.json();
-  showJson(resultView, data);
+function addChatMessage(role, text) {
+  const div = document.createElement("div");
+  div.className = `chat-msg ${role === "user" ? "chat-msg-user" : "chat-msg-agent"}`;
+  div.textContent = `${role === "user" ? "你" : "Agent"}：${text}`;
+  chatLog.appendChild(div);
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-document.getElementById("extract_btn").addEventListener("click", async () => {
+function renderTimeline(steps = []) {
+  const map = {};
+  steps.forEach((item) => {
+    map[item.name] = item;
+  });
+  timeline.innerHTML = "";
+  STEP_ORDER.forEach((name) => {
+    const item = map[name] || { name, status: "pending", summary: "" };
+    const node = document.createElement("div");
+    node.className = `timeline-item timeline-item-${item.status}`;
+    node.textContent = `${STEP_LABEL[name]}：${item.status}${item.summary ? ` ｜ ${item.summary}` : ""}`;
+    timeline.appendChild(node);
+  });
+}
+
+function renderResultCards(steps = []) {
+  resultCards.innerHTML = "";
+  steps.forEach((step) => {
+    const card = document.createElement("div");
+    card.className = "result-card";
+    const title = document.createElement("h3");
+    title.textContent = STEP_LABEL[step.step] || step.step;
+    const summary = document.createElement("div");
+    summary.textContent = step.summary || "";
+    card.appendChild(title);
+    card.appendChild(summary);
+    resultCards.appendChild(card);
+  });
+}
+
+function setSessionHint() {
+  sessionHint.textContent = sessionId ? `会话：${sessionId}` : "会话：未创建";
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+async function fetchStatus() {
+  if (!sessionId) {
+    throw new Error("请先发送业务需求，创建会话");
+  }
+  const response = await fetch(`/session/status?session_id=${encodeURIComponent(sessionId)}`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.detail || "status request failed");
+  }
+  showJson(statusView, data);
+  renderTimeline(data.data.steps || []);
+  if (data.data.status === "completed" || data.data.status === "failed") {
+    stopPolling();
+  }
+  return data;
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    try {
+      await fetchStatus();
+    } catch (error) {
+      stopPolling();
+      showJson(statusView, { ok: false, message: String(error) });
+    }
+  }, 2000);
+}
+
+document.getElementById("send_btn").addEventListener("click", async () => {
   try {
-    const currentSpec = getFormSpec();
     const chat = document.getElementById("chat_input").value.trim();
-    const messages = chat ? chat.split("\n").filter(Boolean) : [];
+    if (!chat) {
+      throw new Error("请输入你的业务需求");
+    }
+    addChatMessage("user", chat);
+    document.getElementById("chat_input").value = "";
 
-    const data = await postJson("/spec/extract", {
-      chat_messages: messages,
-      current_spec: currentSpec,
+    const data = await postJson("/session/message", {
+      session_id: sessionId,
+      message: chat,
     });
-    extractedSpec = data.data.spec;
-    fillForm(extractedSpec);
-    showJson(diffView, { from: currentSpec, to: extractedSpec });
+    sessionId = data.data.session_id;
+    setSessionHint();
+    addChatMessage("agent", data.data.assistant_message);
+    showJson(statusView, data);
   } catch (error) {
-    showJson(resultView, { ok: false, message: String(error) });
-  }
-});
-
-document.getElementById("validate_btn").addEventListener("click", async () => {
-  try {
-    const spec = extractedSpec || getFormSpec();
-    const data = await postJson("/spec/validate", { spec });
-    showJson(resultView, data);
-  } catch (error) {
-    showJson(resultView, { ok: false, message: String(error) });
-  }
-});
-
-document.getElementById("freeze_btn").addEventListener("click", async () => {
-  try {
-    const spec = extractedSpec || getFormSpec();
-    const data = await postJson("/spec/freeze", { spec });
-    frozenSpec = { ...spec, version: data.data.version };
-    showJson(resultView, { freeze: data, frozen_spec_preview: frozenSpec });
-  } catch (error) {
-    showJson(resultView, { ok: false, message: String(error) });
+    showJson(statusView, { ok: false, message: String(error) });
   }
 });
 
 document.getElementById("run_btn").addEventListener("click", async () => {
   try {
-    const spec = frozenSpec || extractedSpec || getFormSpec();
-    const data = await postJson("/workflow/run", { spec });
+    if (!sessionId) {
+      throw new Error("请先发送业务需求，再开始分析");
+    }
+    const data = await postJson("/session/run", { session_id: sessionId });
+    showJson(statusView, data);
+    startPolling();
+  } catch (error) {
+    showJson(statusView, { ok: false, message: String(error) });
+  }
+});
+
+document.getElementById("status_btn").addEventListener("click", async () => {
+  try {
+    await fetchStatus();
+  } catch (error) {
+    showJson(statusView, { ok: false, message: String(error) });
+  }
+});
+
+document.getElementById("result_btn").addEventListener("click", async () => {
+  try {
+    if (!sessionId) {
+      throw new Error("请先发送业务需求");
+    }
+    const response = await fetch(`/session/result?session_id=${encodeURIComponent(sessionId)}`);
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || "result request failed");
+    }
     showJson(resultView, data);
+    renderResultCards(data.data.steps || []);
   } catch (error) {
     showJson(resultView, { ok: false, message: String(error) });
   }
 });
 
-document.getElementById("reload_artifacts_btn").addEventListener("click", loadArtifacts);
-
-loadArtifacts();
+setSessionHint();
+renderTimeline([]);

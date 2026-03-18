@@ -5,16 +5,16 @@
 ## 当前实现（MVP）
 
 - 前端单页：`apps/web`
-  - 表单输入 Spec
-  - 对话抽取 Spec
-  - Diff 对比并回填
-  - 冻结 Spec 与触发工作流
+  - 业务对话输入
+  - 分析进度时间线
+  - 结果卡片与原始结果查看
 - 后端 API：`apps/api`
-  - `POST /spec/extract`
-  - `POST /spec/validate`
-  - `POST /spec/freeze`
-  - `POST /workflow/run`
-  - `GET /artifacts`
+  - `POST /session/message`
+  - `POST /session/run`
+  - `GET /session/status`
+  - `GET /session/result`
+  - `GET /session/export`
+  - 保留底层 `spec/workflow` API 作为内部能力
 
 ## 启动
 
@@ -39,7 +39,7 @@
 
 ## 说明
 
-当前 `extract` 与 `workflow` 已采用 DeepSeek 严格执行模式，不做规则降级或兜底。
-任一步骤失败会直接报错并中止流程。
+当前产品默认通过“会话接口”执行，`spec` 由后端内部维护，前端不暴露配置细节。
+`extract` 与 `workflow` 采用 DeepSeek 严格执行模式，不做规则降级或兜底，任一步骤失败会直接中止。
 
 可使用 `GET /llm/ping` 快速验证 DeepSeek 连通性。

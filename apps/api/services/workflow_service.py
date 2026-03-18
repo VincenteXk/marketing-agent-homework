@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 from apps.api.models import ProjectSpec
 from apps.api.services.llm_service import deepseek_chat_json
@@ -70,7 +71,10 @@ def _run_agent_step(spec: ProjectSpec, run_id: str, step_name: str, instruction:
     return result
 
 
-def run_workflow(spec: ProjectSpec) -> dict[str, str]:
+def run_workflow(
+    spec: ProjectSpec,
+    progress_callback: Callable[[str, str, str], None] | None = None,
+) -> dict[str, str | list[dict]]:
     _ensure_dirs()
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     run_log_path = RUNS_DIR / f"run_{run_id}.md"
@@ -86,7 +90,17 @@ def run_workflow(spec: ProjectSpec) -> dict[str, str]:
 
     step_results: list[dict] = []
     for step_name, instruction in steps:
-        step_results.append(_run_agent_step(spec=spec, run_id=run_id, step_name=step_name, instruction=instruction))
+        if progress_callback:
+            progress_callback(step_name, "running", "")
+        try:
+            step_result = _run_agent_step(spec=spec, run_id=run_id, step_name=step_name, instruction=instruction)
+            step_results.append(step_result)
+            if progress_callback:
+                progress_callback(step_name, "done", step_result.get("summary", ""))
+        except Exception as exc:  # noqa: BLE001
+            if progress_callback:
+                progress_callback(step_name, "failed", str(exc))
+            raise
 
     run_log_lines = [
         f"# Workflow Run {run_id}",
@@ -119,6 +133,7 @@ def run_workflow(spec: ProjectSpec) -> dict[str, str]:
         "run_id": run_id,
         "run_log_path": str(run_log_path),
         "artifact_path": str(artifact_path),
+        "steps": step_results,
     }
 
 

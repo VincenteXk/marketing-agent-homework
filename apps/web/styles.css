@@ -30,6 +30,11 @@ h2 {
   margin-bottom: 18px;
 }
 
+.small {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;
@@ -73,6 +78,91 @@ button {
 
 button:hover {
   background: #dbeafe;
+}
+
+.primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.primary:hover {
+  background: #1d4ed8;
+}
+
+.chat-log {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  min-height: 140px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+}
+
+.chat-msg {
+  margin-bottom: 8px;
+  line-height: 1.4;
+  font-size: 14px;
+}
+
+.chat-msg-user {
+  color: #111827;
+}
+
+.chat-msg-agent {
+  color: #0f766e;
+}
+
+.timeline {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.timeline-item {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #ffffff;
+}
+
+.timeline-item-pending {
+  border-color: #d1d5db;
+}
+
+.timeline-item-running {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.timeline-item-done {
+  border-color: #059669;
+  background: #ecfdf5;
+}
+
+.timeline-item-failed {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.result-cards {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.result-card {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.result-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
 }
 
 .output {

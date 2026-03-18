@@ -8,62 +8,35 @@
   </head>
   <body>
     <main class="container">
-      <h1>AI Marketing Lab</h1>
-      <p class="muted">通过表单 + 对话生成并冻结 project spec，然后一键运行工作流。</p>
+      <h1>Marketing Agent Copilot</h1>
+      <p class="muted">直接用业务语言描述你的需求，我会自动完成市场探索、画像、联合分析与策略建议。</p>
 
       <section class="card">
-        <h2>1) Project Setup</h2>
-        <form id="spec-form">
-          <label>
-            project_id
-            <input id="project_id" value="proj1" />
-          </label>
-          <label>
-            domain
-            <input id="domain" placeholder="例如：AI陪伴APP" />
-          </label>
-          <label>
-            goal
-            <input id="goal" placeholder="例如：情绪支持与成长支持" />
-          </label>
-          <label>
-            target_users（逗号分隔）
-            <input id="target_users" placeholder="大学生,职场年轻人" />
-          </label>
-          <label>
-            sample_size
-            <input id="sample_size" type="number" value="100" />
-          </label>
-          <label>
-            deadline
-            <input id="deadline" placeholder="3.22 22:00" />
-          </label>
-          <label>
-            notes
-            <textarea id="notes" rows="3"></textarea>
-          </label>
-        </form>
-      </section>
-
-      <section class="card">
-        <h2>2) Spec Chat</h2>
-        <textarea id="chat_input" rows="4" placeholder="输入自然语言，例如：我们做AI陪伴APP，目标用户大学生和职场年轻人，样本100"></textarea>
+        <h2>业务对话</h2>
+        <div id="chat_log" class="chat-log"></div>
+        <textarea
+          id="chat_input"
+          rows="3"
+          placeholder="例如：我们想做AI陪伴APP，面向大学生和职场年轻人，希望验证产品策略和付费模式，样本量100"
+        ></textarea>
         <div class="actions">
-          <button id="extract_btn">从对话抽取 spec</button>
-          <button id="validate_btn">校验 spec</button>
-          <button id="freeze_btn">冻结 spec</button>
-          <button id="run_btn">运行 workflow</button>
-          <button id="reload_artifacts_btn">刷新 artifacts</button>
+          <button id="send_btn">发送需求</button>
+          <button id="run_btn" class="primary">开始分析</button>
+          <button id="status_btn">刷新状态</button>
+          <button id="result_btn">查看结果</button>
         </div>
+        <p id="session_hint" class="muted small">会话：未创建</p>
       </section>
 
       <section class="card">
-        <h2>3) Spec Diff</h2>
-        <pre id="diff_view" class="output"></pre>
+        <h2>执行进度</h2>
+        <div id="timeline" class="timeline"></div>
+        <pre id="status_view" class="output"></pre>
       </section>
 
       <section class="card">
-        <h2>4) Dashboard</h2>
+        <h2>结果中心</h2>
+        <div id="result_cards" class="result-cards"></div>
         <pre id="result_view" class="output"></pre>
       </section>
     </main>

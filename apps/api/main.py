@@ -11,10 +11,19 @@ from apps.api.models import (
     ApiResponse,
     ExtractRequest,
     FreezeRequest,
+    SessionMessageRequest,
+    SessionRunRequest,
     ValidateRequest,
     WorkflowRunRequest,
 )
 from apps.api.services.llm_service import deepseek_ping
+from apps.api.services.session_service import (
+    add_user_message,
+    get_session_exports,
+    get_session_result,
+    get_session_status,
+    run_session,
+)
 from apps.api.services.spec_service import extract_spec_from_chat, validate_spec
 from apps.api.services.workflow_service import freeze_spec, list_artifacts, run_workflow
 
@@ -86,3 +95,48 @@ def workflow_run(payload: WorkflowRunRequest) -> ApiResponse:
 def artifacts() -> ApiResponse:
     result = list_artifacts()
     return ApiResponse(message="artifact list", data=result)
+
+
+@app.post("/session/message", response_model=ApiResponse)
+def session_message(payload: SessionMessageRequest) -> ApiResponse:
+    try:
+        result = add_user_message(session_id=payload.session_id, message=payload.message)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ApiResponse(message="session message accepted", data=result)
+
+
+@app.post("/session/run", response_model=ApiResponse)
+def session_run(payload: SessionRunRequest) -> ApiResponse:
+    try:
+        result = run_session(session_id=payload.session_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ApiResponse(message="session workflow started", data=result)
+
+
+@app.get("/session/status", response_model=ApiResponse)
+def session_status(session_id: str) -> ApiResponse:
+    try:
+        result = get_session_status(session_id=session_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ApiResponse(message="session status", data=result)
+
+
+@app.get("/session/result", response_model=ApiResponse)
+def session_result(session_id: str) -> ApiResponse:
+    try:
+        result = get_session_result(session_id=session_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ApiResponse(message="session result", data=result)
+
+
+@app.get("/session/export", response_model=ApiResponse)
+def session_export(session_id: str) -> ApiResponse:
+    try:
+        result = get_session_exports(session_id=session_id)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return ApiResponse(message="session export", data=result)
