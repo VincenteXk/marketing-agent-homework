@@ -18,7 +18,8 @@
         <button type="button" class="tab-btn" data-tab="concept">产品概念设计</button>
         <button type="button" class="tab-btn" data-tab="persona">模拟画像设计</button>
         <button type="button" class="tab-btn" data-tab="conjoint">联合分析设计</button>
-        <button type="button" class="tab-btn" data-tab="simulation">消费者模拟</button>
+        <button type="button" class="tab-btn" data-tab="simulation">消费者数据模拟</button>
+        <button type="button" class="tab-btn" data-tab="analysis">联合分析结果</button>
         <button type="button" class="tab-btn" data-tab="real-data">真实数据获取</button>
         <button type="button" class="tab-btn" data-tab="summary">汇总</button>
       </nav>
@@ -77,14 +78,67 @@
       <div id="tab-conjoint" class="tab-content" data-tab-content="conjoint">
         <section class="card">
           <h2>联合分析设计</h2>
-          <p class="muted small">此分区预留给属性与水平设计流程，当前请在“汇总”分区继续分析。</p>
+          <p class="muted small">
+            基于市场调研与消费者画像，自动生成联合分析属性设计，包括属性范围与取值。
+          </p>
+
+          <!-- 按钮 -->
+          <div class="actions">
+            <button id="conjoint_generate_btn" class="primary">
+              生成联合分析设计
+            </button>
+          </div>
+
+          <!-- 状态提示 -->
+          <div id="conjoint_status_hint" class="small muted">
+            点击按钮后生成属性设计
+          </div>
+
+          <!-- 结果展示区 -->
+          <div id="conjoint_result" class="result-cards"></div>
+
         </section>
       </div>
 
       <div id="tab-simulation" class="tab-content" data-tab-content="simulation">
         <section class="card">
           <h2>消费者数据模拟</h2>
-          <p class="muted small">此分区预留给样本与模拟数据流程，当前请在“汇总”分区继续分析。</p>
+          <p class="muted small">
+              基于联合分析属性设计，自动生成模拟消费者样本与选择数据。
+          </p>
+
+          <div class="actions">
+            <button id="simulation_generate_btn" class="primary">
+              生成模拟消费者数据
+            </button>
+          </div>
+
+          <div id="simulation_status_hint" class="small muted">
+              请先完成联合分析设计。
+          </div>
+
+          <div id="simulation_data_view" class="result-cards"></div>
+        </section>
+      </div>
+      
+      <div id="tab-analysis" class="tab-content" data-tab-content="analysis">
+        <section class="card">
+          <h2>联合分析结果与产品策略</h2>
+          <p class="muted small">
+            基于模拟消费者选择数据，估计属性重要性、偏好方向，并给出产品策略建议。
+          </p>
+
+          <div class="actions">
+            <button id="analysis_generate_btn" class="primary">
+            生成联合分析结果
+            </button>
+          </div>
+
+          <div id="analysis_status_hint" class="small muted">
+            请先完成消费者数据模拟。
+          </div>
+
+          <div id="analysis_result_view" class="result-cards"></div>
         </section>
       </div>
 

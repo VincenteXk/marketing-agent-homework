@@ -37,12 +37,23 @@ const personaStats = document.getElementById("persona_stats");
 const personaChart = document.getElementById("persona_chart");
 const personaCards = document.getElementById("persona_cards");
 const personaGenerateBtn = document.getElementById("persona_generate_btn");
+const conjointStatusHint = document.getElementById("conjoint_status_hint");
+const conjointResult = document.getElementById("conjoint_result");
+const conjointGenerateBtn = document.getElementById("conjoint_generate_btn");
+const simulationStatusHint = document.getElementById("simulation_status_hint");
+const simulationDataView = document.getElementById("simulation_data_view");
+const simulationGenerateBtn = document.getElementById("simulation_generate_btn");
+const analysisStatusHint = document.getElementById("analysis_status_hint");
+const analysisResultView = document.getElementById("analysis_result_view");
+const analysisGenerateBtn = document.getElementById("analysis_generate_btn");
+
 
 const STEP_ORDER = [
   "market_exploration",
   "persona_generation",
   "conjoint_design",
-  "simulation_analysis",
+  "simulation_data",
+  "conjoint_analysis",
   "reflection",
 ];
 
@@ -50,7 +61,8 @@ const STEP_LABEL = {
   market_exploration: "市场探索",
   persona_generation: "消费者画像",
   conjoint_design: "联合分析设计",
-  simulation_analysis: "模拟与策略分析",
+  simulation_data: "消费者数据模拟",
+  conjoint_analysis: "联合分析结果",
   reflection: "反思与建议",
 };
 
@@ -71,6 +83,9 @@ let currentCitations = [];
 let currentTimelineSteps = [];
 let currentResultSteps = [];
 let currentPersonaStep = null;
+let currentConjointStep = null;
+let currentSimulationDataStep = null;
+let currentAnalysisStep = null;
 let chatMessages = [];
 let activeTab = "research";
 let currentTargetLane = "";
@@ -78,14 +93,15 @@ let conceptChatMessages = [];
 let currentResearchFullText = "";
 let currentConfirmedConcept = "";
 let conceptSending = false;
-const WORKFLOW_STAGE_ORDER = ["research", "concept", "persona", "conjoint", "simulation", "real-data"];
+const WORKFLOW_STAGE_ORDER = ["research", "concept", "persona", "conjoint", "simulation", "analysis", "real-data"];
 const WORKFLOW_STAGE_LEVEL = {
   research: 0,
   concept: 1,
   persona: 2,
   conjoint: 3,
   simulation: 4,
-  "real-data": 4,
+  analysis: 5,
+  "real-data": 6,
 };
 const WORKFLOW_MAX_LEVEL = Math.max(...Object.values(WORKFLOW_STAGE_LEVEL));
 let workflowCurrentStageId = WORKFLOW_STAGE_ORDER[0];
@@ -182,7 +198,8 @@ function applyWorkflowLocksToUi() {
       panel.classList.remove("tab-content-stage-locked");
       return;
     }
-    const editable = getStageLevel(tabId) === getStageLevel(workflowCurrentStageId) && !workflowLockedStageMap[tabId];
+
+    const editable = isStageUnlocked(tabId);
     panel.inert = !editable;
     panel.classList.toggle("tab-content-stage-locked", !editable);
   });
@@ -455,6 +472,8 @@ function collectUiState() {
     resultSteps: currentResultSteps,
     personaStep: currentPersonaStep,
     personaProgressText: personaProgressText ? personaProgressText.textContent : "",
+    conjointStep: currentConjointStep,
+    simulationDataStep: currentSimulationDataStep,
     chatMessages,
     activeTab,
     targetLane: currentTargetLane,
@@ -1490,6 +1509,252 @@ async function generatePersonaFromConcept() {
   markStageCompleted("persona");
 }
 
+async function generateConjointDesign() {
+  // 自动兜底，而不是阻断
+if (!currentConfirmedConcept) {
+  console.warn("未确认概念，使用默认");
+  currentConfirmedConcept = "默认AI产品概念";
+}
+
+if (!currentPersonaStep) {
+  console.warn("未生成persona，使用mock数据");
+  currentPersonaStep = {
+    outputs: {
+      personas: [
+        {
+          type: "大众用户",
+          share: 100,
+          price_sensitivity: 3
+        }
+      ]
+    }
+  };
+}
+
+  if (conjointGenerateBtn) {
+    conjointGenerateBtn.disabled = true;
+  }
+  if (conjointStatusHint) {
+    conjointStatusHint.textContent = "正在生成联合分析框架，请稍候…";
+  }
+
+  markStageSubmitted("conjoint");
+
+  const response = await postJson("/conjoint/design", {
+    lane: String(currentTargetLane || laneInput.value || "").trim(),
+    research_context: currentResearchFullText,
+    research_structured: currentStructuredData || {},
+    confirmed_concept: currentConfirmedConcept,
+    personas: currentPersonaStep?.outputs?.personas || [],
+  });
+
+  const step = response?.data?.step;
+  if (!step || !Array.isArray(step?.outputs?.attributes) || step.outputs.attributes.length === 0) {
+    throw new Error("联合分析框架生成成功，但未返回有效属性设计");
+  }
+
+  currentConjointStep = step;
+  renderConjointWorkspace(currentConjointStep);
+  markStageCompleted("conjoint");
+}
+
+async function generateSimulationData() {
+  console.log("generateSimulationData started");
+
+  if (!currentConjointStep) {
+    throw new Error("请先完成联合分析设计");
+  }
+
+  if (simulationGenerateBtn) {
+    simulationGenerateBtn.disabled = true;
+  }
+  if (simulationStatusHint) {
+    simulationStatusHint.textContent = "正在生成模拟消费者数据，请稍候…";
+  }
+
+  markStageSubmitted("simulation");
+
+  const response = await postJson("/simulation/generate", {
+    lane: String(currentTargetLane || laneInput.value || "").trim(),
+    confirmed_concept: currentConfirmedConcept || "默认AI产品概念",
+    conjoint_design: currentConjointStep?.outputs || {},
+    personas: currentPersonaStep?.outputs?.personas || [
+      { type: "默认用户", share: 100, price_sensitivity: 3 }
+    ],
+    sample_size: 100
+  });
+
+  console.log("simulation response:", response);
+
+  const step = response?.data?.step;
+  if (!step || !step.outputs) {
+    throw new Error("模拟数据生成成功，但未返回有效结果");
+  }
+
+  currentSimulationDataStep = step;
+  renderSimulationDataWorkspace(currentSimulationDataStep);
+  markStageCompleted("simulation");
+  // 强制刷新按钮状态
+  applyWorkflowLocksToUi();
+  // 可选：启用 analysis 按钮
+  if (analysisGenerateBtn) {
+    analysisGenerateBtn.disabled = false;
+}
+}
+if (analysisGenerateBtn) {
+  analysisGenerateBtn.addEventListener("click", async () => {
+    try {
+      await generateConjointAnalysis();
+    } catch (error) {
+      if (analysisStatusHint) {
+        analysisStatusHint.textContent = `生成失败：${String(error)}`;
+      }
+    } finally {
+      if (analysisGenerateBtn) {
+        analysisGenerateBtn.disabled = false;
+      }
+    }
+  });
+}
+
+function renderConjointWorkspace(step = null) {
+  if (!conjointStatusHint || !conjointResult) {
+    return;
+  }
+
+  const conjointStep = step && typeof step === "object" ? step : null;
+  const attributes = Array.isArray(conjointStep?.outputs?.attributes)
+    ? conjointStep.outputs.attributes
+    : [];
+
+  // ❌ 没数据
+  if (!conjointStep || attributes.length === 0) {
+    conjointStatusHint.textContent = "暂无联合分析设计，请点击按钮生成。";
+    conjointResult.innerHTML = "";
+    return;
+  }
+
+  // ✅ 有数据
+  conjointStatusHint.textContent = "已生成联合分析设计";
+
+  conjointResult.innerHTML = "";
+
+  attributes.forEach((attr) => {
+    const card = document.createElement("div");
+    card.className = "result-card";
+
+    // 属性名
+    const title = document.createElement("h3");
+    title.textContent = attr.name || "未命名属性";
+
+    // levels（取值）
+    const levels = document.createElement("div");
+    levels.className = "result-section";
+    levels.innerHTML = `
+      <div class="result-section-title">属性取值</div>
+      <ul class="result-bullets">
+        ${(attr.levels || []).map(l => `<li>${l}</li>`).join("")}
+      </ul>
+    `;
+
+    // 解释
+    const reason = document.createElement("div");
+    reason.className = "result-section";
+    reason.innerHTML = `
+      <div class="result-section-title">设计理由</div>
+      <div class="result-text">${attr.reason || "暂无说明"}</div>
+    `;
+
+    card.appendChild(title);
+    card.appendChild(levels);
+    card.appendChild(reason);
+
+    conjointResult.appendChild(card);
+  });
+
+  // 可选：整体说明
+  if (conjointStep.outputs?.design_notes) {
+    const note = document.createElement("div");
+    note.className = "result-card";
+    note.innerHTML = `
+      <h3>设计说明</h3>
+      <div class="result-text">${conjointStep.outputs.design_notes}</div>
+    `;
+    conjointResult.appendChild(note);
+  }
+
+  schedulePersistUiState();
+}
+
+function renderSimulationDataWorkspace(step = null) {
+  if (!simulationStatusHint || !simulationDataView) {
+    return;
+  }
+
+  const simulationStep = step && typeof step === "object" ? step : null;
+  const outputs = simulationStep?.outputs || {};
+  const respondents = Array.isArray(outputs.respondents) ? outputs.respondents : [];
+  const profiles = Array.isArray(outputs.profiles) ? outputs.profiles : [];
+  const choices = Array.isArray(outputs.choices) ? outputs.choices : [];
+  const profileSummary = Array.isArray(outputs.profile_summary) ? outputs.profile_summary : [];
+  const segmentSummary = Array.isArray(outputs.segment_summary) ? outputs.segment_summary : [];
+  const logicNotes = Array.isArray(outputs.logic_notes) ? outputs.logic_notes : [];
+  
+
+
+  if (!simulationStep || (!respondents.length && !choices.length)) {
+    simulationStatusHint.textContent = "暂无模拟数据，请点击按钮生成。";
+    simulationDataView.innerHTML = "";
+    return;
+  }
+
+  simulationStatusHint.textContent = "已生成模拟消费者数据，可用于后续策略分析。";
+
+  simulationDataView.innerHTML = `
+    <div class="result-card">
+      <h3>样本概览</h3>
+      <div class="result-text">模拟消费者数量：${respondents.length}</div>
+      <div class="result-text">模拟选择记录数量：${choices.length}</div>
+    </div>
+    <div class="result-card">
+      <h3>前 5 条消费者样本</h3>
+      <pre class="output">${escapeHtml(JSON.stringify(respondents.slice(0, 5), null, 2))}</pre>
+    </div>
+    <div class="result-card">
+      <h3>前 5 条选择记录</h3>
+      <pre class="output">${escapeHtml(JSON.stringify(choices.slice(0, 5), null, 2))}</pre>
+    </div>
+  `;
+
+
+    const profileSummaryWithDetails = profileSummary.map((row) => {
+      const matchedProfile = profiles.find((p) => p.profile_id === row.profile_id) || {};
+      return {
+        ...row,
+        ...matchedProfile
+    };
+  });
+
+  if (profileSummaryWithDetails.length) {
+    simulationDataView.appendChild(
+      buildSimpleTable("方案汇总", profileSummaryWithDetails)
+    );
+  }
+
+  if (segmentSummary.length) {
+    simulationDataView.appendChild(
+      buildSimpleTable("分画像汇总", segmentSummary)
+    );
+  }
+
+  if (logicNotes.length) {
+    simulationDataView.appendChild(
+      buildBulletCard("模拟逻辑说明", logicNotes)
+    );
+}
+  schedulePersistUiState();
+}
+
 function pickLead(step) {
   const outputs = step.outputs || {};
   if (step.step === "market_exploration" && outputs.conclusion) {
@@ -1584,7 +1849,7 @@ function renderStepDetails(card, step) {
     return;
   }
 
-  if (step.step === "simulation_analysis") {
+  if (step.step === "simulation_data") {
     const sample = outputs.simulated_sample_structure || {};
     addSection(card, "模拟样本结构", {
       sample_size: sample.sample_size || "",
@@ -1667,6 +1932,163 @@ async function fetchResult(scrollToResult = false) {
   if (scrollToResult) {
     resultCards.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  schedulePersistUiState();
+}
+
+async function generateConjointAnalysis() {
+
+  if (analysisGenerateBtn) {
+    analysisGenerateBtn.disabled = true;
+  }
+  if (analysisStatusHint) {
+    analysisStatusHint.textContent = "正在生成联合分析结果，请稍候…";
+  }
+
+  markStageSubmitted("analysis");
+
+  try {
+    const response = await postJson("/analysis/generate", {
+      lane: String(currentTargetLane || laneInput.value || "").trim(),
+      confirmed_concept: currentConfirmedConcept || "默认AI产品概念",
+      conjoint_design: currentConjointStep?.outputs || {},
+      simulation_data: currentSimulationDataStep?.outputs || {},
+      personas: currentPersonaStep?.outputs?.personas || [],
+    });
+
+    const step = response?.data?.step;
+    if (!step || !step.outputs) {
+      throw new Error("联合分析结果生成成功，但未返回有效结果");
+    }
+
+    currentAnalysisStep = step;
+    renderAnalysisWorkspace(currentAnalysisStep);
+    markStageCompleted("analysis");
+  } finally {
+    if (analysisGenerateBtn) {
+      analysisGenerateBtn.disabled = false;
+    }
+    schedulePersistUiState();
+  }
+}
+
+function buildSimpleTable(title, rows) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "result-card";
+
+  const heading = document.createElement("h3");
+  heading.textContent = title;
+  wrapper.appendChild(heading);
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "result-text";
+    empty.textContent = "暂无数据";
+    wrapper.appendChild(empty);
+    return wrapper;
+  }
+
+  const table = document.createElement("table");
+  table.className = "result-table";
+
+  const columns = Object.keys(rows[0]);
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  columns.forEach((col) => {
+    const th = document.createElement("th");
+    th.textContent = col;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    columns.forEach((col) => {
+      const td = document.createElement("td");
+      td.textContent = row[col] == null ? "" : String(row[col]);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
+function renderAnalysisWorkspace(step = null) {
+  if (!analysisStatusHint || !analysisResultView) {
+    return;
+  }
+
+  const analysisStep = step && typeof step === "object" ? step : null;
+  const outputs = analysisStep?.outputs || {};
+  const attributeImportance = Array.isArray(outputs.attribute_importance) ? outputs.attribute_importance : [];
+  const partworthSummary = Array.isArray(outputs.partworth_summary) ? outputs.partworth_summary : [];
+  const recommendedProduct = outputs.recommended_product || null;
+  const strategySuggestions = Array.isArray(outputs.strategy_suggestions) ? outputs.strategy_suggestions : [];
+
+  // 新增这两行
+  const personaPreferenceSummary = Array.isArray(outputs.persona_preference_summary)
+    ? outputs.persona_preference_summary
+    : [];
+  const profileChoiceSummary = Array.isArray(outputs.profile_choice_summary)
+    ? outputs.profile_choice_summary
+    : [];
+
+  if (!analysisStep || (!attributeImportance.length && !partworthSummary.length && !recommendedProduct)) {
+    analysisStatusHint.textContent = "暂无联合分析结果，请点击按钮生成。";
+    analysisResultView.innerHTML = "";
+    return;
+  }
+
+  analysisStatusHint.textContent = "已生成联合分析结果与产品策略。";
+  analysisResultView.innerHTML = "";
+
+  if (attributeImportance.length) {
+    analysisResultView.appendChild(buildSimpleTable("属性重要性", attributeImportance));
+  }
+
+  if (partworthSummary.length) {
+    analysisResultView.appendChild(buildSimpleTable("偏好总结", partworthSummary));
+  }
+
+  if (recommendedProduct) {
+    const card = document.createElement("div");
+    card.className = "result-card";
+    card.innerHTML = `
+      <h3>推荐产品方案</h3>
+      <div class="result-text">${escapeHtml(JSON.stringify(recommendedProduct, null, 2))}</div>
+    `;
+    analysisResultView.appendChild(card);
+  }
+
+  if (strategySuggestions.length) {
+    const card = document.createElement("div");
+    card.className = "result-card";
+    const title = document.createElement("h3");
+    title.textContent = "产品策略建议";
+    card.appendChild(title);
+  if (profileChoiceSummary.length) {
+    analysisResultView.appendChild(buildSimpleTable("方案胜出情况", profileChoiceSummary));
+  }
+
+  if (personaPreferenceSummary.length) {
+    analysisResultView.appendChild(buildSimpleTable("分画像偏好总结", personaPreferenceSummary));
+  }
+    const ul = document.createElement("ul");
+    ul.className = "result-bullets";
+    strategySuggestions.forEach((item) => {
+      const li = document.createElement("li");
+      li.textContent = item;
+      ul.appendChild(li);
+    });
+    card.appendChild(ul);
+    analysisResultView.appendChild(card);
+  }
+
   schedulePersistUiState();
 }
 
@@ -1799,6 +2221,38 @@ if (personaGenerateBtn) {
   });
 }
 
+if (conjointGenerateBtn) {
+  conjointGenerateBtn.addEventListener("click", async () => {
+    try {
+      await generateConjointDesign();
+    } catch (error) {
+      if (conjointStatusHint) {
+        conjointStatusHint.textContent = `生成失败：${String(error)}`;
+      }
+    } finally {
+      if (conjointGenerateBtn) {
+        conjointGenerateBtn.disabled = false;
+      }
+    }
+  });
+}
+
+if (simulationGenerateBtn) {
+  simulationGenerateBtn.addEventListener("click", async () => {
+    try {
+      await generateSimulationData();
+    } catch (error) {
+      if (simulationStatusHint) {
+        simulationStatusHint.textContent = `生成失败：${String(error)}`;
+      }
+    } finally {
+      if (simulationGenerateBtn) {
+        simulationGenerateBtn.disabled = false;
+      }
+    }
+  });
+}
+
 if (restartBtn) {
   restartBtn.addEventListener("click", () => {
     const ok = window.confirm("确认重新开始吗？这会清空当前所有输入和结果。");
@@ -1875,6 +2329,30 @@ function applyDefaultUiState() {
   if (personaStatusHint) {
     personaStatusHint.textContent = "请先完成“产品概念设计”并确认概念。";
   }
+  currentConjointStep = null;
+  if (conjointResult) {
+    conjointResult.innerHTML = "";
+  }
+  if (conjointStatusHint) {
+    conjointStatusHint.textContent = "请先完成前面的产品概念与画像生成。";
+  }
+  // ---- simulation reset（加在这里）----
+  currentSimulationDataStep = null;
+  if (simulationDataView) {
+    simulationDataView.innerHTML = "";
+  }
+  if (simulationStatusHint) {
+    simulationStatusHint.textContent = "请先完成联合分析设计。";
+  }
+
+  currentAnalysisStep = null;
+  if (analysisResultView) {
+    analysisResultView.innerHTML = "";
+  }
+  if (analysisStatusHint) {
+    analysisStatusHint.textContent = "请先完成消费者数据模拟。";
+  }
+
   setPersonaProgress("待开始");
   citationList.innerHTML = "";
   chatLog.innerHTML = "";
@@ -1951,7 +2429,11 @@ function restoreUiState(state) {
     personaProgressText.textContent = state.personaProgressText;
   }
   renderPersonaWorkspace(currentPersonaStep);
+  currentConjointStep = state.conjointStep && typeof state.conjointStep === "object" ? state.conjointStep : null;
+  renderConjointWorkspace(currentConjointStep);
 
+  currentSimulationDataStep = state.simulationDataStep && typeof state.simulationDataStep === "object" ? state.simulationDataStep : null;
+  renderSimulationDataWorkspace(currentSimulationDataStep);
   statusHuman.textContent = state.statusHuman || "还没开始分析。先按 Agent 的问题补充信息。";
   statusView.textContent = state.statusJsonText || JSON.stringify({ hint: "这里显示运行状态的技术详情（JSON）" }, null, 2);
   resultView.textContent = state.resultJsonText || JSON.stringify({ hint: "这里显示分析结果的技术详情（JSON）" }, null, 2);
