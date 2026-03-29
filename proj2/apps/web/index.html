@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proj2 · Agent 推广方案</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero-intro">
+        <h1>Agent 推广方案生成</h1>
+      </section>
+
+      <section class="card param-card" aria-labelledby="param-heading">
+        <h2 id="param-heading">运行参数</h2>
+        
+        <label for="param_product">产品描述</label>
+        <textarea
+          id="param_product"
+          rows="8"
+          placeholder="产品定位、卖点、目标用户等"
+          autocomplete="off"
+        >MindSync 最适合被界定为⼀款⾯向学⽣与年轻职场⼈群的对话式 AI ⼼理陪伴与情绪管理 App。它以聊天界⾯作为主要⼊⼝，围绕"记录―反馈―⼲预―升级⽀持"构建完整使⽤链条，核⼼价值集中在⾼频可及、隐私可信、连续⽀持三个⽅⾯。定位是轻心理的AI聊天陪伴助手，核心功能是聊天、对用户做心理学建模、提供回顾和建议。</textarea>
+
+        <label for="param_goal">推广目标</label>
+        <textarea
+          id="param_goal"
+          rows="3"
+          placeholder="例如：首发认知、转化试用、节日大促等"
+          autocomplete="off"
+        >学⽣与初⼊职场⼈</textarea>
+
+        <label for="param_budget">总预算</label>
+        <input
+          id="param_budget"
+          type="text"
+          value="2万元"
+          placeholder="例如：5 万元（或说明口径）"
+          autocomplete="off"
+        />
+
+        <label for="param_channels">渠道</label>
+        <textarea
+          id="param_channels"
+          rows="2"
+          placeholder="例如：小红书、抖音、私域社群、线下门店（可多行）"
+          autocomplete="off"
+        >小红书/B站</textarea>
+
+        <div class="actions">
+          <button type="button" id="btn_generate" class="primary">生成推广文案</button>
+        </div>
+      </section>
+
+      <section class="card feed-card" aria-labelledby="feed-heading">
+        <h2 id="feed-heading">生成过程</h2>
+        <p class="muted small">各阶段文本与两张主图将依次出现在此区域（整页向下延展，便于长截图）。</p>
+        <div id="run_feed" class="run-feed" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div id="export_wrap" class="export-wrap hidden" aria-hidden="true">
+          <div class="actions">
+            <button type="button" id="btn_export">导出 Slogan、文案与两张图</button>
+          </div>
+          <p class="muted small export-hint">
+            优先使用 Chrome / Edge：点击后选择文件夹，将自动保存「推广slogan和文案.txt」「推广图1.png」「推广图2.png」。其它浏览器将改为连续下载三个文件。
+          </p>
+        </div>
+      </section>
+    </main>
+    <script src="/static/script.js"></script>
+  </body>
+</html>
