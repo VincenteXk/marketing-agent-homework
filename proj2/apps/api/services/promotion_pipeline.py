@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from apps.api.services.llm_service import deepseek_chat_json
 from apps.api.services.modelscope_image import generate_image_url
+from apps.api.services.vlm_service import vlm_validate_image
 
 ItemKind = Literal["slogan", "copy", "image_prompt_pair"]
 
@@ -379,12 +380,13 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
     text_p = _format_pair_report(pairs, best_pair, avg_p, detail_p)
     yield {"event": "stage", "stage": "visual_plan", "status": "done", "text": text_p}
 
-    yield {"event": "stage", "stage": "visual_assets", "status": "active"}
+    yield {"event": "stage", "stage": "visual_iterate", "status": "active"}
     yield {
         "event": "stage",
-        "stage": "visual_assets",
+        "stage": "visual_iterate",
         "status": "update",
-        "text": "已选用最高分的一套双图提示词，正在并行调用魔搭各生成一张（共 2 张）…",
+        "text": "已选用最高分的一套双图提示词；每轮并行验收图一、图二，未通过侧用相同提示词重绘，"
+        "已通过侧沿用且不重复送验；整流程最多 **5 版**（首版 + 4 轮迭代）。",
     }
 
     p1, p2 = best_pair
@@ -394,12 +396,78 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
         url1 = f1.result()
         url2 = f2.result()
 
+    urls: list[str] = [url1, url2]
+    prompts = [p1, p2]
+    passed_locked: list[bool] = [False, False]
+    qa_log: list[str] = []
+    version = 1
+    max_versions = 5
+    before_regen = urls.copy()
+
+    while True:
+        kept = [False, False] if version == 1 else [urls[s] == before_regen[s] for s in (0, 1)]
+        yield {
+            "event": "stage",
+            "stage": "visual_iterate",
+            "status": "round_images",
+            "round": version,
+            "image_urls": list(urls),
+            "kept": kept,
+        }
+
+        results_payload: list[dict[str, object]] = []
+        for slot in (0, 1):
+            label = "推广图一" if slot == 0 else "推广图二"
+            if passed_locked[slot]:
+                results_payload.append(
+                    {
+                        "slot": slot,
+                        "passed": True,
+                        "skipped": True,
+                        "reason": "该图已在之前轮次通过验收，本版沿用且未重复送验。",
+                    }
+                )
+                continue
+            ok, reason = vlm_validate_image(urls[slot], prompts[slot])
+            if ok:
+                passed_locked[slot] = True
+            qa_log.append(f"{label}（第 {version} 版）：{'通过' if ok else '未通过'} — {reason}")
+            results_payload.append(
+                {
+                    "slot": slot,
+                    "passed": ok,
+                    "skipped": False,
+                    "reason": reason,
+                }
+            )
+
+        yield {
+            "event": "stage",
+            "stage": "visual_iterate",
+            "status": "round_qa",
+            "round": version,
+            "results": results_payload,
+        }
+
+        if passed_locked[0] and passed_locked[1]:
+            break
+        if version >= max_versions:
+            break
+
+        before_regen = urls.copy()
+        for s in (0, 1):
+            if not passed_locked[s]:
+                urls[s] = generate_image_url(prompts[s])
+        version += 1
+
     yield {
         "event": "stage",
-        "stage": "visual_assets",
+        "stage": "visual_iterate",
         "status": "done",
-        "image_urls": [url1, url2],
+        "text": "\n".join(qa_log),
     }
+
+    final_urls = list(urls)
 
     yield {
         "event": "done",
@@ -408,5 +476,6 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
             "copy": best_copy,
             "image_prompt_1": p1,
             "image_prompt_2": p2,
+            "image_urls": final_urls,
         },
     }

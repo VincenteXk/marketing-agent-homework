@@ -31,13 +31,17 @@ def _headers_poll() -> dict[str, str]:
 
 
 def create_image_task(prompt: str) -> str:
-    body = json.dumps(
-        {
-            "model": settings.modelscope_image_model,
-            "prompt": prompt.strip(),
-        },
-        ensure_ascii=False,
-    ).encode("utf-8")
+    payload: dict[str, object] = {
+        "model": settings.modelscope_image_model,
+        "prompt": prompt.strip(),
+    }
+    if settings.modelscope_image_size:
+        payload["size"] = settings.modelscope_image_size
+    if settings.modelscope_image_steps is not None:
+        payload["steps"] = settings.modelscope_image_steps
+    if settings.modelscope_image_guidance is not None:
+        payload["guidance"] = settings.modelscope_image_guidance
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = request.Request(
         f"{MODEL_SCOPE_BASE}/v1/images/generations",
         data=body,

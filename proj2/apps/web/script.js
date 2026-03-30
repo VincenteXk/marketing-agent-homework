@@ -7,7 +7,7 @@ const STAGE_DEFS = [
   { key: "strategy", title: "推广策略与核心信息" },
   { key: "copy", title: "Slogan 与广告文案" },
   { key: "visual_plan", title: "主视觉创意说明" },
-  { key: "visual_assets", title: "主视觉图" },
+  { key: "visual_iterate", title: "主视觉生成与验收" },
 ];
 
 const STATUS_LABEL = {
@@ -186,18 +186,15 @@ function mountStageSkeletons() {
     const body = document.createElement("div");
     body.className = "stage-body";
 
-    if (def.key === "visual_assets") {
+    if (def.key === "visual_iterate") {
       const progress = document.createElement("p");
       progress.className = "stage-asset-progress small muted";
       progress.textContent = "";
       body.appendChild(progress);
-      const imgs = document.createElement("div");
-      imgs.className = "stage-images";
-      const slot = document.createElement("div");
-      slot.className = "stage-image-slot";
-      slot.textContent = "两张推广图生成后将显示于此";
-      imgs.appendChild(slot);
-      body.appendChild(imgs);
+      const feed = document.createElement("div");
+      feed.id = "visual_iterate_feed";
+      feed.className = "visual-iterate-feed";
+      body.appendChild(feed);
     }
 
     block.appendChild(head);
@@ -209,9 +206,115 @@ function mountStageSkeletons() {
 }
 
 /**
- * @param {string} key
- * @param {{ status?: 'pending'|'active'|'done'|'error', bodyText?: string, appendText?: string, imageUrls?: string[] }} patch
+ * @param {string} rawUrl
  */
+function proxyImageUrl(rawUrl) {
+  return `/promotion/proxy-image?url=${encodeURIComponent(String(rawUrl))}`;
+}
+
+/**
+ * @param {string} text
+ */
+function setVisualIterateProgress(text) {
+  const block = stageRoots.get("visual_iterate");
+  const p = block && block.querySelector(".stage-asset-progress");
+  if (p) {
+    p.textContent = text;
+  }
+}
+
+/**
+ * @param {number} round
+ * @param {string[]} imageUrls
+ * @param {boolean[]} kept
+ */
+function appendRoundImageCard(round, imageUrls, kept) {
+  const feed = document.getElementById("visual_iterate_feed");
+  if (!feed) {
+    return;
+  }
+  const card = document.createElement("section");
+  card.className = "viz-card viz-card-images";
+  const h = document.createElement("h4");
+  h.className = "viz-card-title";
+  h.textContent = `主视觉图（第 ${round} 版）`;
+  card.appendChild(h);
+  const row = document.createElement("div");
+  row.className = "viz-two-up";
+  for (let s = 0; s < 2; s++) {
+    const cell = document.createElement("div");
+    cell.className = "viz-cell";
+    const cap = document.createElement("div");
+    cap.className = "small muted viz-cell-label";
+    cap.textContent = s === 0 ? "推广图一" : "推广图二";
+    cell.appendChild(cap);
+    const wrap = document.createElement("div");
+    wrap.className = "viz-img-wrap";
+    const img = document.createElement("img");
+    const raw = imageUrls[s];
+    img.src = raw ? proxyImageUrl(raw) : "";
+    img.alt = s === 0 ? "推广图一" : "推广图二";
+    wrap.appendChild(img);
+    if (kept && kept[s]) {
+      const badge = document.createElement("span");
+      badge.className = "viz-kept-badge";
+      badge.textContent = "沿用已通过版本";
+      wrap.appendChild(badge);
+    }
+    cell.appendChild(wrap);
+    row.appendChild(cell);
+  }
+  card.appendChild(row);
+  feed.appendChild(card);
+}
+
+/**
+ * @param {number} round
+ * @param {Array<{ slot?: number; passed?: boolean; skipped?: boolean; reason?: string }>} results
+ */
+function appendRoundQaCard(round, results) {
+  const feed = document.getElementById("visual_iterate_feed");
+  if (!feed) {
+    return;
+  }
+  const card = document.createElement("section");
+  card.className = "viz-card viz-card-qa";
+  const h = document.createElement("h4");
+  h.className = "viz-card-title";
+  h.textContent = "主视觉画面验收";
+  card.appendChild(h);
+  const sub = document.createElement("p");
+  sub.className = "small muted viz-card-sub";
+  sub.textContent = `与第 ${round} 版主视觉图对应`;
+  card.appendChild(sub);
+  const list = document.createElement("div");
+  list.className = "viz-qa-rows";
+  for (const r of results) {
+    const slot = typeof r.slot === "number" ? r.slot : 0;
+    const passed = Boolean(r.passed);
+    const skipped = Boolean(r.skipped);
+    const reason = r.reason != null ? String(r.reason) : "";
+    const row = document.createElement("div");
+    row.className =
+      "viz-qa-row" + (skipped ? " skipped" : passed ? " pass" : " fail");
+    const label = document.createElement("span");
+    label.className = "viz-qa-label";
+    label.textContent = slot === 0 ? "推广图一" : "推广图二";
+    const body = document.createElement("div");
+    body.className = "viz-qa-body";
+    if (skipped) {
+      body.textContent = `已通过（沿用），未重复送验。${reason ? " " + reason : ""}`;
+    } else {
+      body.textContent = `${passed ? "通过" : "未通过"}：${reason}`;
+    }
+    row.appendChild(label);
+    row.appendChild(body);
+    list.appendChild(row);
+  }
+  card.appendChild(list);
+  feed.appendChild(card);
+}
+
 function updateRunStage(key, patch) {
   const block = stageRoots.get(key);
   if (!block) {
@@ -225,30 +328,8 @@ function updateRunStage(key, patch) {
     statusEl.textContent = STATUS_LABEL[patch.status] || patch.status;
   }
 
-  if (key === "visual_assets") {
-    if (patch.imageUrls && patch.imageUrls.length > 0) {
-      let imgs = bodyEl.querySelector(".stage-images");
-      if (!imgs) {
-        imgs = document.createElement("div");
-        imgs.className = "stage-images";
-        bodyEl.appendChild(imgs);
-      }
-      imgs.innerHTML = "";
-      patch.imageUrls.forEach((url, idx) => {
-        const slot = document.createElement("div");
-        slot.className = "stage-image-slot";
-        const img = document.createElement("img");
-        img.src = url;
-        img.alt = idx === 0 ? "推广图一" : "推广图二";
-        slot.appendChild(img);
-        imgs.appendChild(slot);
-      });
-      return;
-    }
-  }
-
   if (patch.bodyText != null && bodyEl) {
-    if (key === "visual_assets") {
+    if (key === "visual_iterate") {
       const prog = bodyEl.querySelector(".stage-asset-progress");
       if (prog) {
         prog.textContent = patch.bodyText;
@@ -256,7 +337,7 @@ function updateRunStage(key, patch) {
     } else {
       bodyEl.textContent = patch.bodyText;
     }
-  } else if (patch.appendText && bodyEl && key !== "visual_assets") {
+  } else if (patch.appendText && bodyEl && key !== "visual_iterate") {
     bodyEl.textContent += patch.appendText;
   }
 }
@@ -278,6 +359,12 @@ function handlePromotionEvent(ev) {
       if (data.copy != null) {
         exportState.copy = String(data.copy);
       }
+      if (Array.isArray(data.image_urls)) {
+        exportState.imageUrls = data.image_urls
+          .map((u) => String(u))
+          .filter(Boolean)
+          .map((u) => `/promotion/proxy-image?url=${encodeURIComponent(u)}`);
+      }
     }
     return;
   }
@@ -292,6 +379,59 @@ function handlePromotionEvent(ev) {
     ? ev.image_urls.map((u) => String(u)).filter(Boolean)
     : [];
 
+  if (stage === "visual_iterate") {
+    if (status === "active") {
+      updateRunStage("visual_iterate", { status: "active" });
+      setVisualIterateProgress("");
+      const feed = document.getElementById("visual_iterate_feed");
+      if (feed) {
+        feed.innerHTML = "";
+      }
+      return;
+    }
+    if (status === "update" && text != null) {
+      updateRunStage("visual_iterate", { status: "active" });
+      setVisualIterateProgress(text);
+      return;
+    }
+    if (status === "round_images") {
+      updateRunStage("visual_iterate", { status: "active" });
+      const round = typeof ev.round === "number" ? ev.round : 1;
+      const rawList = Array.isArray(ev.image_urls)
+        ? ev.image_urls.map((u) => String(u)).filter(Boolean)
+        : [];
+      const kept = Array.isArray(ev.kept)
+        ? ev.kept.map((k) => Boolean(k))
+        : [false, false];
+      if (rawList.length >= 2) {
+        appendRoundImageCard(round, rawList, kept);
+      }
+      return;
+    }
+    if (status === "round_qa") {
+      updateRunStage("visual_iterate", { status: "active" });
+      const round = typeof ev.round === "number" ? ev.round : 1;
+      const results = Array.isArray(ev.results) ? ev.results : [];
+      appendRoundQaCard(round, results);
+      return;
+    }
+    if (status === "done" && text != null) {
+      updateRunStage("visual_iterate", { status: "done" });
+      setVisualIterateProgress("");
+      const feed = document.getElementById("visual_iterate_feed");
+      if (feed) {
+        let sum = feed.querySelector(".viz-final-summary");
+        if (!sum) {
+          sum = document.createElement("div");
+          sum.className = "viz-final-summary";
+          feed.appendChild(sum);
+        }
+        sum.textContent = text;
+      }
+      return;
+    }
+  }
+
   if (status === "active") {
     updateRunStage(stage, { status: "active" });
   } else if (status === "update" && text != null) {
@@ -302,9 +442,6 @@ function handlePromotionEvent(ev) {
       const proxied = rawList.map(
         (u) => `/promotion/proxy-image?url=${encodeURIComponent(u)}`,
       );
-      if (stage === "visual_assets") {
-        exportState.imageUrls = proxied;
-      }
       updateRunStage(stage, { status: "done", imageUrls: proxied });
     } else if (text != null) {
       updateRunStage(stage, { status: "done", bodyText: text });
