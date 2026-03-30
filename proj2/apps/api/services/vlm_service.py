@@ -23,7 +23,14 @@ _QA_SYSTEM = (
 
 def _allowed_image_host(hostname: str) -> bool:
     h = hostname.lower()
-    return "modelscope" in h or h.endswith(".cn") or "aliyuncs.com" in h
+    return (
+        "volcengineapi.com" in h
+        or "volces.com" in h
+        or "byteimg.com" in h
+        or "bytedtos.com" in h
+        or h.endswith(".cn")
+        or "aliyuncs.com" in h
+    )
 
 
 def fetch_image_as_data_url(https_url: str) -> str:

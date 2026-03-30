@@ -52,12 +52,12 @@ class Settings:
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
     deepseek_base_url: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     deepseek_model: str = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    modelscope_token: str = os.getenv("MODELSCOPE_API_KEY", "") or os.getenv("MODELSCOPE_TOKEN", "")
-    modelscope_image_model: str = os.getenv("MODELSCOPE_IMAGE_MODEL", "Tongyi-MAI/Z-Image-Turbo")
-    # 见仓库内 `生图.md`：Z-Image-Turbo 适合 1024 级分辨率与固定步数；魔搭 HTTP 若不支持某字段可留空省略
-    modelscope_image_size: str = os.getenv("MODELSCOPE_IMAGE_SIZE", "1024x1024").strip()
-    modelscope_image_steps: int | None = _opt_int("MODELSCOPE_IMAGE_STEPS")
-    modelscope_image_guidance: float | None = _opt_float("MODELSCOPE_IMAGE_GUIDANCE")
+    text2image_access_key_id: str = os.getenv("TEXT2IMAGE_ACCESS_KEY_ID", "")
+    text2image_secret_access_key: str = os.getenv("TEXT2IMAGE_SECRET_ACCESS_KEY", "")
+    # text2image size 为面积，默认 2048*2048（2K）
+    text2image_size: int | None = _opt_int("TEXT2IMAGE_SIZE") or 2048 * 2048
+    text2image_poll_interval_sec: float = _opt_float("TEXT2IMAGE_POLL_INTERVAL_SEC") or 3.0
+    text2image_poll_max_attempts: int = _opt_int("TEXT2IMAGE_POLL_MAX_ATTEMPTS") or 80
     vlm_ark_api_key: str = os.getenv("VLM_ARK_API_KEY", "")
     vlm_model: str = os.getenv("VLM_MODEL", "doubao-seed-1-6-flash-250828")
 

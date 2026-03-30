@@ -419,6 +419,7 @@ button:disabled {
 
 .viz-qa-body {
   word-break: break-word;
+  white-space: pre-line;
 }
 
 .viz-final-summary {

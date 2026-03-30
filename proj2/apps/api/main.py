@@ -58,7 +58,10 @@ def health() -> dict[str, str]:
 def _allowed_image_host(hostname: str) -> bool:
     h = hostname.lower()
     return (
-        "modelscope" in h
+        "volcengineapi.com" in h
+        or "volces.com" in h
+        or "byteimg.com" in h
+        or "bytedtos.com" in h
         or h.endswith(".cn")
         or "aliyuncs.com" in h
     )

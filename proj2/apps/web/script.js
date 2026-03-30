@@ -270,7 +270,7 @@ function appendRoundImageCard(round, imageUrls, kept) {
 
 /**
  * @param {number} round
- * @param {Array<{ slot?: number; passed?: boolean; skipped?: boolean; reason?: string }>} results
+ * @param {Array<{ slot?: number; passed?: boolean; skipped?: boolean; reason?: string; llm_rewrite?: string }>} results
  */
 function appendRoundQaCard(round, results) {
   const feed = document.getElementById("visual_iterate_feed");
@@ -294,6 +294,7 @@ function appendRoundQaCard(round, results) {
     const passed = Boolean(r.passed);
     const skipped = Boolean(r.skipped);
     const reason = r.reason != null ? String(r.reason) : "";
+    const llmRewrite = r.llm_rewrite != null ? String(r.llm_rewrite).trim() : "";
     const row = document.createElement("div");
     row.className =
       "viz-qa-row" + (skipped ? " skipped" : passed ? " pass" : " fail");
@@ -306,6 +307,9 @@ function appendRoundQaCard(round, results) {
       body.textContent = `已通过（沿用），未重复送验。${reason ? " " + reason : ""}`;
     } else {
       body.textContent = `${passed ? "通过" : "未通过"}：${reason}`;
+      if (!passed && llmRewrite) {
+        body.textContent += `\nLLM修改：${llmRewrite}`;
+      }
     }
     row.appendChild(label);
     row.appendChild(body);

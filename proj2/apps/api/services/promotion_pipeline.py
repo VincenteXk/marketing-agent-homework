@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Literal
 
 from apps.api.services.llm_service import deepseek_chat_json
-from apps.api.services.modelscope_image import generate_image_url
+from apps.api.services.text2image import generate_text2image_url
 from apps.api.services.vlm_service import vlm_validate_image
 
 ItemKind = Literal["slogan", "copy", "image_prompt_pair"]
@@ -91,7 +91,7 @@ def _run_single_score(
     data = deepseek_chat_json(
         _score_messages(c, item_kind, item_text, dimension),
         max_tokens=256,
-        temperature=0.15,
+        temperature=0.5,
     )
     return {
         "score": _clamp_score(data.get("score")),
@@ -344,6 +344,46 @@ def _format_pair_report(
     return "\n".join(lines)
 
 
+def _rewrite_failed_image_prompt(
+    c: dict[str, str],
+    slogan: str,
+    copy_text: str,
+    slot: int,
+    failed_prompt: str,
+    sibling_prompt: str,
+    reject_reason: str,
+) -> str:
+    slot_label = "图一（主视觉）" if slot == 0 else "图二（配套图）"
+    sibling_label = "图二（配套图）" if slot == 0 else "图一（主视觉）"
+    user = (
+        _ctx_block(c)
+        + f"\n【已定标语】{slogan}\n"
+        + f"【已定广告正文】\n{copy_text}\n\n"
+        + f"【同套另一张提示词（{sibling_label}）】\n{sibling_prompt.strip()}\n\n"
+        + f"【本次被打回的提示词（{slot_label}）】\n{failed_prompt.strip()}\n\n"
+        + f"【验收打回理由】\n{reject_reason.strip()}\n\n"
+        + "请仅改写被打回这一张的中文生图提示词，目标是提升文字可读性和语义准确性，避免乱码或无意义字符。"
+        + "改写后仍需与同套另一张在风格、构图叙事上保持一致。"
+        + "请写得具体可执行，强调：中文可读文本、界面/文案清晰、不要出现随机字符。"
+        + '只输出 JSON：{"prompt":"..."}'
+    )
+    data = deepseek_chat_json(
+        [
+            {
+                "role": "system",
+                "content": "你是中文广告视觉提示词优化师，只输出合法 JSON，不要 markdown。",
+            },
+            {"role": "user", "content": user},
+        ],
+        max_tokens=900,
+        temperature=0.45,
+    )
+    p = str(data.get("prompt") or "").strip()
+    if not p:
+        raise RuntimeError("LLM 未返回有效改写提示词")
+    return p
+
+
 def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
     yield {"event": "stage", "stage": "strategy", "status": "active"}
     yield {"event": "stage", "stage": "strategy", "status": "update", "text": "正在生成 5 条标语…"}
@@ -386,15 +426,13 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
         "stage": "visual_iterate",
         "status": "update",
         "text": "已选用最高分的一套双图提示词；每轮并行验收图一、图二，未通过侧用相同提示词重绘，"
-        "已通过侧沿用且不重复送验；整流程最多 **5 版**（首版 + 4 轮迭代）。",
+        "已通过侧沿用且不重复送验；未通过侧容许最多 5 轮迭代。",
     }
 
     p1, p2 = best_pair
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(generate_image_url, p1)
-        f2 = pool.submit(generate_image_url, p2)
-        url1 = f1.result()
-        url2 = f2.result()
+    # 即梦侧并发能力受限：双图改为串行生成，避免触发并发限流（50430）。
+    url1 = generate_text2image_url(p1)
+    url2 = generate_text2image_url(p2)
 
     urls: list[str] = [url1, url2]
     prompts = [p1, p2]
@@ -431,6 +469,21 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
             ok, reason = vlm_validate_image(urls[slot], prompts[slot])
             if ok:
                 passed_locked[slot] = True
+            llm_rewrite = ""
+            if not ok:
+                try:
+                    llm_rewrite = _rewrite_failed_image_prompt(
+                        c=c,
+                        slogan=best_slogan,
+                        copy_text=best_copy,
+                        slot=slot,
+                        failed_prompt=prompts[slot],
+                        sibling_prompt=prompts[1 - slot],
+                        reject_reason=reason,
+                    )
+                    prompts[slot] = llm_rewrite
+                except Exception as exc:  # noqa: BLE001
+                    llm_rewrite = f"提示词改写失败，暂沿用原提示词。({str(exc)[:120]})"
             qa_log.append(f"{label}（第 {version} 版）：{'通过' if ok else '未通过'} — {reason}")
             results_payload.append(
                 {
@@ -438,6 +491,7 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
                     "passed": ok,
                     "skipped": False,
                     "reason": reason,
+                    "llm_rewrite": llm_rewrite,
                 }
             )
 
@@ -457,7 +511,7 @@ def iter_promotion_events(c: dict[str, str]) -> Iterator[dict[str, Any]]:
         before_regen = urls.copy()
         for s in (0, 1):
             if not passed_locked[s]:
-                urls[s] = generate_image_url(prompts[s])
+                urls[s] = generate_text2image_url(prompts[s])
         version += 1
 
     yield {
